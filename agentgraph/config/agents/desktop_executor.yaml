@@ -1,0 +1,182 @@
+version: 1
+
+agent:
+  agent_id: desktop_executor
+  role: DesktopAutomationAgent
+  goal: >
+    Безопасно выполнять пользовательские задачи на компьютере:
+    работа с файлами, загрузка материалов, установка и обновление ПО,
+    запуск разрешённых приложений.
+  backstory: >
+    Ты автономный десктоп-ассистент. Ты работаешь только в разрешённых
+    областях, всегда показываешь предпросмотр рискованных действий и
+    обязательно запрашиваешь подтверждение перед необратимыми или
+    системно значимыми изменениями.
+
+  capabilities:
+    - capability_id: fs_operations
+      name: Работа с файлами и папками
+      summary: Создание, перемещение, удаление и проверка файлов в разрешённой песочнице.
+      keywords:
+        - создать
+        - создай
+        - папку
+        - каталог
+        - директорию
+        - файл
+        - перемести
+        - перенеси
+        - скопируй
+        - удали
+        - рабочий стол
+        - документы
+        - загрузки
+        - путь
+      regex_patterns:
+        - "(создай|создать)\\s+(папк\\w*|каталог\\w*|директор\\w*)"
+        - "(создай|создать|сохрани|запиши)\\s+файл"
+        - "(перемести|перенеси|скопируй|удали)\\s+.+"
+      domains:
+        - filesystem
+        - workspace_management
+      tool_affinity:
+        - fs.create_dir
+        - fs.move
+        - fs.delete
+      embedding_text: filesystem create directory file move copy delete desktop documents path workspace sandbox local operations
+
+    - capability_id: software_install
+      name: Установка и обновление программ
+      summary: Установка и обновление пакетов через доверенные менеджеры.
+      keywords:
+        - установи
+        - установить
+        - обнови
+        - обновить
+        - пакет
+        - программу
+        - приложение
+        - pip
+        - npm
+        - brew
+        - winget
+        - apt
+      regex_patterns:
+        - "(установи|установить)\\s+.+"
+        - "(обнови|обновить)\\s+.+"
+        - "(pip|npm|brew|winget|apt)\\s+.+"
+      domains:
+        - package_management
+        - system_admin
+      tool_affinity:
+        - package.install
+        - package.update
+      embedding_text: package install update application software pip npm brew winget apt trusted source manager
+
+    - capability_id: web_research
+      name: Поиск и загрузка информации
+      summary: Поиск материалов в интернете и безопасная загрузка файлов.
+      keywords:
+        - найди
+        - поиск
+        - информация
+        - статья
+        - новости
+        - документация
+        - скачать
+        - загрузить
+        - pdf
+        - инструкция
+      regex_patterns:
+        - "(найди|ищи|поиск)\\s+.+"
+        - "(скачай|загрузи|скачать)\\s+.+"
+      domains:
+        - research
+        - information_retrieval
+      tool_affinity:
+        - web.search
+        - web.download
+      embedding_text: web search information documentation article news download pdf retrieval internet source
+
+    - capability_id: app_control
+      name: Управление приложениями
+      summary: Запуск разрешённых приложений и проверка их состояния.
+      keywords:
+        - открой
+        - запусти
+        - браузер
+        - календарь
+        - почта
+        - редактор
+        - терминал
+        - приложение
+      regex_patterns:
+        - "(открой|запусти)\\s+.+"
+      domains:
+        - application_automation
+      tool_affinity:
+        - app.launch
+      embedding_text: open launch browser calendar mail terminal editor application process automation
+
+  tools:
+    - tool_ref: fs.create_dir
+      permission_level: write
+      requires_hitl: true
+    - tool_ref: fs.move
+      permission_level: write
+      requires_hitl: true
+    - tool_ref: fs.delete
+      permission_level: admin
+      requires_hitl: true
+    - tool_ref: package.install
+      permission_level: write
+      requires_hitl: true
+    - tool_ref: package.update
+      permission_level: write
+      requires_hitl: true
+    - tool_ref: web.search
+      permission_level: read
+      requires_hitl: false
+    - tool_ref: web.download
+      permission_level: write
+      requires_hitl: true
+    - tool_ref: app.launch
+      permission_level: read
+      requires_hitl: false
+
+  delegation_policy:
+    confidence_threshold: 0.70
+    fallback_strategy: human
+    policy_weight: 1.30
+
+  memory_policy:
+    auto_sync: true
+    link_generation: true
+    versioning: true
+    graph_linking: true
+    summarization: false
+
+  intent_classifier:
+    default_strategy: keyword_plus_regex
+    ambiguity_fallback: human
+    capability_resolution_order:
+      - fs_operations
+      - software_install
+      - web_research
+      - app_control
+    desktop_executor_priority_rules:
+      - when_any_keyword_count_gte: 2
+        domains:
+          - filesystem
+          - package_management
+          - application_automation
+        force_min_confidence: 0.78
+      - when_regex_matches:
+          - "(создай|создать).+(папк|каталог|директор)"
+          - "(скачай|загрузи).+(файл|pdf|zip|документ)"
+          - "(открой|запусти).+(браузер|почту|календарь|редактор)"
+        route_to: desktop_executor
+        force_min_confidence: 0.82
+      - when_multistep_request: true
+        route_to: planner
+        force_min_confidence: 0.8

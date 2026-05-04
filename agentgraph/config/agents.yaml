@@ -1,0 +1,293 @@
+core_agents:
+  - agent_id: coordinator
+    role: orchestration lead
+    goal: Understand each task, choose the route, and control progress.
+    backstory: A strict dispatcher that does not do specialist work itself and focuses on routing, escalation, and task control.
+    tools:
+      - tool_ref: state.inspect
+        permission_level: read
+      - tool_ref: routing.simulate
+        permission_level: read
+      - tool_ref: quota.check
+        permission_level: read
+      - tool_ref: conflict.resolve
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.15
+      fallback_strategy: human
+      policy_weight: 1.15
+    memory_policy:
+      auto_sync: false
+      summarization: false
+      link_generation: true
+      versioning: true
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-coordinator
+        name: Task Coordination
+        summary: Routes tasks and manages orchestration decisions.
+        keywords: [route, delegate, orchestrate, coordinate]
+        domains: [orchestration, workflow]
+        tool_affinity: []
+        embedding_text: task routing delegation orchestration coordinator dispatch
+
+  - agent_id: researcher
+    role: evidence collector
+    goal: Collect relevant evidence, facts, and source snippets.
+    backstory: A careful researcher that avoids invention and prefers grounded, high-signal evidence for downstream synthesis.
+    tools:
+      - tool_ref: __RESEARCH_TOOL_REF__
+        permission_level: read
+      - tool_ref: web.fetch
+        permission_level: read
+      - tool_ref: web.crawl
+        permission_level: read
+      - tool_ref: parse.extract
+        permission_level: read
+      - tool_ref: fs.read_file
+        permission_level: read
+      - tool_ref: cache.store
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: citation.verify
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.05
+      fallback_strategy: reroute
+      policy_weight: 1.25
+    memory_policy:
+      auto_sync: true
+      link_generation: true
+      versioning: true
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-researcher
+        name: Technical Research
+        summary: Finds facts, excerpts, and supporting evidence.
+        keywords:
+          [
+            research,
+            evidence,
+            facts,
+            sources,
+            summary,
+            explain,
+            usage,
+            documentation,
+            langgraph,
+            исследование,
+            факты,
+            источники,
+            описание,
+            кратко,
+            объясни,
+            используется,
+            документация,
+          ]
+        domains: [analysis, documentation]
+        tool_affinity: [__RESEARCH_TOOL_REF__]
+        embedding_text: research evidence facts sources documentation analysis summary explain usage langgraph исследование факты источники описание кратко объяснение используется документация langgraph
+
+  - agent_id: file_executor
+    role: filesystem operator
+    goal: Create directories, write files, and inspect local workspace artifacts safely.
+    backstory: A cautious file operator that performs local filesystem actions inside a sandbox and always prefers explicit paths and review before writes.
+    tools:
+      - tool_ref: fs.create_dir
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: fs.write_file
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: fs.read_file
+        permission_level: read
+      - tool_ref: fs.list_dir
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.02
+      fallback_strategy: human
+      policy_weight: 1.35
+    memory_policy:
+      auto_sync: true
+      link_generation: true
+      versioning: true
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-file-executor
+        name: Filesystem Operations
+        summary: Handles file and directory actions inside the local sandbox.
+        keywords:
+          [file, files, folder, folders, directory, create, mkdir, write, save, read, path, workspace, local, filesystem, файл, файлы, папка, папку, папки, каталог, директория, директорию, создать, создай, записать, запиши, сохранить, сохрани, прочитать, прочитай, путь, локально]
+        domains: [filesystem, local-io, operations]
+        tool_affinity: [fs.create_dir, fs.write_file, fs.read_file, fs.list_dir]
+        embedding_text: filesystem file folder directory create mkdir write save read path workspace local sandbox файловая система файл папка каталог директория создать записать сохранить прочитать путь локально
+
+  - agent_id: synthesizer
+    role: answer composer
+    goal: Assemble final outputs from research and shared context.
+    backstory: An editor-like agent that turns raw findings into concise, structured answers aligned with the target schema.
+    tools:
+      - tool_ref: template.apply
+        permission_level: read
+      - tool_ref: format.validate
+        permission_level: read
+      - tool_ref: cross_ref.link
+        permission_level: read
+      - tool_ref: draft.version
+        permission_level: write
+        requires_hitl: true
+    delegation_policy:
+      confidence_threshold: 0.1
+      fallback_strategy: reroute
+      policy_weight: 1.05
+    memory_policy:
+      auto_sync: true
+      link_generation: true
+      versioning: true
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-synthesizer
+        name: Synthesis
+        summary: Combines artifacts into final structured responses.
+        keywords: [synthesize, compose, summarize, aggregate]
+        domains: [reasoning, summarization]
+        tool_affinity: []
+        embedding_text: synthesis summarize aggregate final response structured output
+
+  - agent_id: memory_curator
+    role: memory manager
+    goal: Preserve useful context, connect entities, and keep notes versioned over time.
+    backstory: An archivist focused on long-term memory quality, entity links, and durable retrieval rather than direct user-facing answers.
+    tools:
+      - tool_ref: fs.write_file
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: vector.update
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: link.generate
+        permission_level: read
+      - tool_ref: stale.detect
+        permission_level: read
+      - tool_ref: index.optimize
+        permission_level: write
+        requires_hitl: true
+      - tool_ref: quarantine.merge
+        permission_level: write
+        requires_hitl: true
+    delegation_policy:
+      confidence_threshold: 0.1
+      fallback_strategy: reroute
+      policy_weight: 0.95
+    memory_policy:
+      auto_sync: true
+      link_generation: true
+      versioning: true
+      graph_linking: true
+      vectorize: false
+    capabilities:
+      - capability_id: cap-memory-curator
+        name: Memory Curation
+        summary: Maintains durable memory, links, versions, and retrieval quality.
+        keywords: [memory, links, versioning, context]
+        domains: [memory, knowledge-management]
+        tool_affinity: []
+        embedding_text: memory links versioning context long term knowledge retrieval curation
+
+  - agent_id: critic
+    role: adversarial reviewer
+    goal: Identify weak assumptions, gaps, and quality risks.
+    backstory: An internal opponent that pressure-tests answers before final delivery and explores alternatives and tradeoffs.
+    tools:
+      - tool_ref: gap.analyze
+        permission_level: read
+      - tool_ref: alternative.generate
+        permission_level: read
+      - tool_ref: bias.detect
+        permission_level: read
+      - tool_ref: tradeoff.evaluate
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.1
+      fallback_strategy: reroute
+      policy_weight: 1.0
+    memory_policy:
+      auto_sync: false
+      link_generation: true
+      versioning: false
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-critic
+        name: Critical Review
+        summary: Challenges weak reasoning, bias, and incomplete outputs.
+        keywords: [critic, review, risks, assumptions, bias, tradeoffs]
+        domains: [quality, review, risk-analysis]
+        tool_affinity: []
+        embedding_text: critical review risks assumptions bias tradeoff failure analysis
+
+specialists:
+  planner:
+    agent_id: planner
+    role: decomposition specialist
+    goal: Break complex tasks into executable and parallel subtasks.
+    backstory: A systems-minded planner that estimates effort, checks dependencies, and optimizes decomposition and parallel execution.
+    tools:
+      - tool_ref: dependency.analyze
+        permission_level: read
+      - tool_ref: effort.estimate
+        permission_level: read
+      - tool_ref: history.query
+        permission_level: read
+      - tool_ref: resource.check
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.05
+      fallback_strategy: reroute
+      policy_weight: 1.1
+    memory_policy:
+      auto_sync: false
+      link_generation: true
+      versioning: false
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-planner
+        name: Task Planning
+        summary: Decomposes work into subtasks and parallel execution branches.
+        keywords: [planner, subtasks, decompose, parallel]
+        domains: [planning, orchestration]
+        tool_affinity: []
+        embedding_text: planner task decomposition subtask parallel execution send
+
+  validator:
+    agent_id: validator
+    role: quality gate
+    goal: Validate facts, structure, and reasoning quality before finalization.
+    backstory: A strict reviewer that checks policy compliance, cross-references facts, calibrates confidence, and tries to break weak answers.
+    tools:
+      - tool_ref: __VALIDATOR_TOOL_REF__
+        permission_level: read
+      - tool_ref: policy.check
+        permission_level: read
+      - tool_ref: fact.cross_reference
+        permission_level: read
+      - tool_ref: self.audit
+        permission_level: read
+      - tool_ref: confidence.calibrate
+        permission_level: read
+    delegation_policy:
+      confidence_threshold: 0.05
+      fallback_strategy: reroute
+      policy_weight: 1.2
+    memory_policy:
+      auto_sync: false
+      link_generation: true
+      versioning: true
+      graph_linking: true
+    capabilities:
+      - capability_id: cap-validator
+        name: Quality Validation
+        summary: Checks factuality, logic, schema quality, and policy alignment.
+        keywords: [validator, fact-check, logic, schema, policy, confidence]
+        domains: [qa, validation, quality]
+        tool_affinity: [__VALIDATOR_TOOL_REF__]
+        embedding_text: validator fact logic schema policy confidence quality assurance

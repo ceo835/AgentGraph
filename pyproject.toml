@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentgraph"
+version = "1.0.0"
+description = "Declarative multi-agent DSL built on top of LangGraph."
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "langgraph>=1.2.0a1,<2",
+    "pydantic>=2.7.4",
+    "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+sqlite = ["langgraph-checkpoint-sqlite>=3.0.0,<4"]
+observability = ["langsmith>=0.8.0,<1"]
+memory = ["networkx>=3.5,<4"]
+qdrant = ["qdrant-client>=1.9.0,<2"]
+weaviate = ["weaviate-client>=4.0.0,<5"]
+ui = ["streamlit>=1.44,<2"]
+
+[dependency-groups]
+test = [
+    "langchain-core>=1.3.2,<2",
+    "langsmith>=0.8.0,<1",
+    "networkx>=3.5,<4",
+    "pytest",
+]
+lint = [
+    "mypy",
+    "ruff",
+]
+docs = [
+    "mkdocs>=1.6.0,<2",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    { include-group = "docs" },
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.hatch.build.targets.wheel]
+include = ["agentgraph", "agentgraph/config/**/*.yaml"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+
+[tool.ruff]
+lint.select = ["E", "F", "I", "UP", "B"]
+lint.ignore = ["E501", "B008"]
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+follow_imports = "silent"
+ignore_missing_imports = true
+exclude = ["tests"]

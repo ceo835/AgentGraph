@@ -1,0 +1,10 @@
+site_name: AgentGraph
+site_description: Public API and architecture reference for the AgentGraph DSL.
+docs_dir: docs
+theme:
+  name: mkdocs
+nav:
+  - Overview: index.md
+  - Architecture: architecture.md
+  - Public API: public-api.md
+  - Release Artifacts: release-artifacts.md

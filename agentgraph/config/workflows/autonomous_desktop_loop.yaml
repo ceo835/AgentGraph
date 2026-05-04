@@ -1,0 +1,164 @@
+version: 1
+
+workflow:
+  name: AutonomousDesktopLoop
+  entrypoint: interface
+
+  state_usage:
+    task_metadata_reads:
+      - allowed_paths
+      - blocked_commands
+      - locale
+      - require_citations
+      - dry_run_preview
+    shared_context_reads:
+      - desktop_context.current_path
+      - desktop_context.installed_packages
+      - desktop_context.trust_score
+      - desktop_context.last_actions
+    shared_context_writes:
+      - desktop_context.current_path
+      - desktop_context.installed_packages
+      - desktop_context.trust_score
+      - desktop_context.last_actions
+      - repair_target
+    audit_log_writes:
+      - plan_created
+      - tool_selected
+      - hitl_requested
+      - verification_passed
+      - verification_failed
+      - rollback_applied
+    memory_refs_writes:
+      - action_ref
+      - snapshot_ref
+      - quarantine_ref
+      - verification_ref
+      - export_ref
+
+  state_diagram_mermaid: |
+    stateDiagram-v2
+        [*] --> Plan
+        Plan --> Route: intent_classified
+        Route --> RiskCheck: tool_selected
+        RiskCheck --> HumanGate: hitl_required
+        RiskCheck --> Execute: path_allowed_and_policy_ok
+        Execute --> Verify: tool_completed
+        Verify --> MemorySync: verification_passed
+        Verify --> RetryOrAlternative: verification_failed_and_retry_available
+        Verify --> AskUser: verification_failed_and_retry_exhausted
+        RetryOrAlternative --> Execute: alternative_selected
+        RetryOrAlternative --> AskUser: no_safe_alternative
+        AskUser --> HumanGate: user_decision_required
+        HumanGate --> Execute: approved
+        HumanGate --> Route: amended
+        HumanGate --> Interface: rejected
+        MemorySync --> Interface: completed
+        Interface --> [*]
+
+  routing_predicates:
+    coordinator_to_desktop_executor:
+      when:
+        - task.assignee is null
+        - task.description matches desktop_executor.intent_classifier
+      outcome: route_to_desktop_executor
+
+    desktop_executor_to_human_gate:
+      when_any:
+        - risk_level == destructive
+        - tool_ref in ["package.install", "package.update"]
+        - target_path outside effective_allowed_paths
+        - target_path intersects blocked_roots
+        - tool.side_effect_level == external_write and desktop_context.trust_score < 0.85
+      outcome: require_hitl
+
+    execute_to_verify:
+      when:
+        - tool_result.success == true
+      outcome: run_operational_verification
+
+    verify_to_retry_or_alternative:
+      when:
+        - verification_passed == false
+        - retry_attempts_remaining == true
+        - tool.is_idempotent == true or safer_alternative_available == true
+      outcome: retry_or_choose_alternative
+
+    verify_to_human_gate:
+      when:
+        - verification_passed == false
+        - retry_attempts_remaining == false
+      outcome: escalate_to_hitl
+
+  hitl_points:
+    enforced_by_policy:
+      - destructive_always
+      - install_always
+      - blocked_or_system_path
+      - write_with_low_trust
+      - quarantine_export
+    override_by_trust_score: false
+
+  fallback_chain:
+    on_verify_fail:
+      - retry_same_tool_if_idempotent
+      - choose_safer_alternative_tool
+      - ask_user_for_alternative_path_or_confirmation
+      - escalate_to_hitl
+
+  intent_tool_policy_matrix:
+    - request: Создай папку REPORTS на рабочем столе
+      capability: fs_operations
+      tool: fs.create_dir
+      risk_level: medium
+      hitl_required: true
+      operational_check: exists + is_dir + stat
+
+    - request: Перемести файл report.pdf в Documents
+      capability: fs_operations
+      tool: fs.move
+      risk_level: medium
+      hitl_required: true
+      operational_check: src missing + target exists + size/hash or dir structure match
+
+    - request: Удали папку temp
+      capability: fs_operations
+      tool: fs.delete
+      risk_level: destructive
+      hitl_required: true
+      operational_check: target absent + snapshot present
+
+    - request: Установи requests через pip
+      capability: software_install
+      tool: package.install
+      risk_level: high
+      hitl_required: true
+      operational_check: manager listing contains package
+
+    - request: Обнови node через winget
+      capability: software_install
+      tool: package.update
+      risk_level: medium
+      hitl_required: true
+      operational_check: installed version matches target
+
+    - request: Найди документацию по LangGraph
+      capability: web_research
+      tool: web.search
+      risk_level: low
+      hitl_required: false
+      operational_check: results non-empty or explicit empty reason
+
+    - request: Скачай PDF инструкцию
+      capability: web_research
+      tool: web.download
+      risk_level: medium
+      hitl_required: true
+      operational_check: size + extension + hash + scan
+
+    - request: Открой браузер
+      capability: app_control
+      tool: app.launch
+      risk_level: low
+      hitl_required: false
+      operational_check: process exists or window handle present

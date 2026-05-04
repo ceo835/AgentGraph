@@ -1,0 +1,251 @@
+version: 1
+
+safety_policy:
+  risk_assessment:
+    low:
+      - web.search
+      - app.launch
+    medium:
+      - fs.create_dir
+      - fs.move
+      - package.update
+      - web.download
+    high:
+      - package.install
+    destructive:
+      - fs.delete
+
+  hitl_rules:
+    - id: destructive_always
+      when: tool.side_effect_level == "destructive"
+      action: require_hitl
+
+    - id: install_always
+      when: tool_ref in ["package.install", "package.update"]
+      action: require_hitl
+
+    - id: write_with_low_trust
+      when: tool.side_effect_level == "external_write" and desktop_context.trust_score < 0.85
+      action: require_hitl
+
+    - id: blocked_or_system_path
+      when: target_path outside allowed_paths or target_path intersects blocked_roots
+      action: require_hitl
+
+    - id: quarantine_export
+      when: tool_ref == "web.download" and destination outside sandbox
+      action: require_hitl
+
+  sandbox_policy:
+    default_scope: user_approved_paths
+    allowed_roots:
+      - ~/Desktop
+      - ~/Documents
+      - ~/Downloads
+      - ~/AgentGraph/workspace
+    blocked_roots:
+      - /
+      - /System
+      - /Windows
+      - /etc
+      - /usr
+      - C:\Windows
+      - C:\Program Files
+      - C:\Program Files (x86)
+    path_resolution:
+      normalize_before_check: true
+      deny_on_symlink_escape: true
+      deny_relative_escape: true
+
+  path_and_app_resolution:
+    normalize_paths: true
+    os_mapping:
+      windows:
+        app_aliases:
+          browser: ["chrome.exe", "msedge.exe", "firefox.exe"]
+          mail: ["outlook.exe"]
+          calendar: ["outlook.exe"]
+          text_editor: ["notepad.exe", "code.exe"]
+          terminal: ["powershell.exe", "cmd.exe", "wt.exe"]
+        path_expansion:
+          "~": "%USERPROFILE%"
+      darwin:
+        app_aliases:
+          browser: ["Google Chrome", "Safari"]
+          mail: ["Mail"]
+          calendar: ["Calendar"]
+          text_editor: ["TextEdit", "Visual Studio Code"]
+          terminal: ["Terminal", "iTerm"]
+        path_expansion:
+          "~": "$HOME"
+      linux:
+        app_aliases:
+          browser: ["chromium-browser", "firefox"]
+          mail: ["thunderbird"]
+          calendar: ["gnome-calendar"]
+          text_editor: ["gedit", "code"]
+          terminal: ["gnome-terminal", "xterm", "konsole"]
+        path_expansion:
+          "~": "$HOME"
+    rule: Разрешены только пути после os.path.normcase() + запрет escape-последовательностей
+
+  planning_policy:
+    enable_for_multistep_tasks: true
+    multistep_signals:
+      keywords:
+        - create
+        - then
+        - after
+        - and
+        - move
+        - download
+        - open
+        - install
+        - создай
+        - затем
+        - потом
+        - после
+        - и
+        - скачай
+        - перемести
+        - открой
+        - установи
+      min_distinct_actions: 2
+    route_to_planner_when:
+      - detected_actions_count >= 2
+      - task.description contains ordered action markers
+    planner_fallback: human
+
+  path_inference_policy:
+    enabled: true
+    aliases:
+      рабочий_стол: ~/Desktop
+      desktop: ~/Desktop
+      документы: ~/Documents
+      documents: ~/Documents
+      загрузки: ~/Downloads
+      downloads: ~/Downloads
+    extraction_hints:
+      - "(на рабоч(ий|ем) стол[е]?)"
+      - "(в документы|в папку документы)"
+      - "(в загрузки|в папку загрузки)"
+
+verification_policy:
+  fs_create_dir_exists_and_stat:
+    checks:
+      - os.path.exists(target_path) == true
+      - os.path.isdir(target_path) == true
+      - stat(target_path) succeeds
+
+  fs_move_source_missing_target_present_hash_match:
+    checks:
+      - os.path.exists(source_path) == false
+      - os.path.exists(target_path) == true
+      - if is_file: size(snapshot) == size(target) AND (hash(snapshot) == hash(target) if available)
+      - if is_dir: entry_count(snapshot) == entry_count(target) AND metadata_timestamp_consistent
+
+  fs_delete_target_absent_snapshot_present:
+    checks:
+      - os.path.exists(target_path) == false
+      - rollback_snapshot_id exists
+
+  fs_export_target_present:
+    checks:
+      - os.path.exists(exported_path) == true
+      - if is_file: size(source_path) == size(exported_path)
+      - if is_dir: entry_count(source_path) == entry_count(exported_path)
+
+  package_present_in_manager_listing:
+    checks:
+      - manager_query(package_name) returns installed == true
+      - installed_source in ["official", "verified"]
+
+  package_version_matches_target:
+    checks:
+      - manager_query(package_name) returns installed == true
+      - installed_version == target_version
+
+  search_results_non_empty_or_explicit_empty:
+    checks:
+      - result object contains either results.length > 0 or explicit no_results_reason
+
+  download_size_extension_hash_and_scan:
+    checks:
+      - downloaded_path exists
+      - extension(downloaded_path) in allowed_extensions
+      - file_size_mb(downloaded_path) <= max_file_size_mb
+      - if expected_hash provided: hash(downloaded_path) == expected_hash
+      - quarantine_scan_status == "clean"
+
+  process_or_window_present:
+    checks:
+      - process_exists(app_name) == true or window_handle_present(app_name) == true
+
+rollback_policy:
+  delete_created_dir_if_empty:
+    action: remove directory if created_by_current_action and still empty
+
+  move_back_to_source:
+    action: move target_path back to source_path if target exists and source absent
+
+  restore_from_snapshot_or_quarantine:
+    action:
+      - if snapshot exists: restore snapshot
+      - else if quarantined copy exists: restore from quarantine
+      - else: require human recovery decision
+
+  uninstall_installed_package:
+    action: invoke matching package manager uninstall for installed version
+
+  reinstall_previous_version:
+    action: install previous_version recorded in audit snapshot
+
+  no_op:
+    action: nothing
+
+  delete_quarantined_file:
+    action: remove quarantine artifact and metadata refs
+
+  delete_exported_copy:
+    action: remove exported_path if created_by_current_action
+
+  close_launched_app_if_requested:
+    action: request user confirmation before closing app
+
+quarantine_policy:
+  enabled: true
+  quarantine_root: ~/AgentGraph/workspace/quarantine
+  staged_downloads: true
+  staged_edits: true
+  auto_scan: true
+  scan_required_for_export: true
+  cleanup_timeout_hours: 24
+  cleanup_on_failed_verification: true
+
+export_policy:
+  sandbox_only_default: true
+  allowed_export_modes:
+    - trusted_paths
+    - user_approved_path
+  rules:
+    - id: export_from_quarantine
+      require_hitl: true
+      require_clean_scan: true
+    - id: export_to_desktop
+      require_hitl: true
+      destination_must_be_under:
+        - ~/Desktop
+        - ~/Documents
+        - ~/Downloads
+
+trust_lifecycle:
+  initial_value: 0.5
+  update_rule: |
+    if audit_log.last_action.verification_passed:
+      shared_context.desktop_context.trust_score = min(1.0, current + 0.1)
+    else:
+      shared_context.desktop_context.trust_score = max(0.0, current - 0.2)
+  cap_rules:
+    - never_exceeds_1.0
+    - never_drops_below_0.0
+    - read_only_for_hitl_decision: true

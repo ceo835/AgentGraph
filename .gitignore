@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.agentgraph_cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+pytest-cache-files-*/
+__pycache__/
+*.pyc

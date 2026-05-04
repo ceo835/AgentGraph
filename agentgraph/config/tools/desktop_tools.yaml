@@ -1,0 +1,212 @@
+version: 1
+
+artifact_mapping:
+  "fs.":
+    artifact_type: filesystem_action
+    artifact_domain: filesystem_action
+    domain_tag: filesystem_action
+  "web.":
+    artifact_type: research
+    artifact_domain: research
+    domain_tag: research
+  "package.":
+    artifact_type: package_action
+    artifact_domain: system_change
+    domain_tag: package_action
+  "app.":
+    artifact_type: app_action
+    artifact_domain: application_automation
+    domain_tag: app_action
+
+tools:
+  fs.create_dir:
+    description: Создаёт директорию в разрешённой области.
+    input_schema:
+      path: string
+      recursive: boolean
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: user_approved_paths
+    dry_run_preview: true
+    is_idempotent: true
+    rollback_strategy: delete_created_dir_if_empty
+    verification_policy: fs_create_dir_exists_and_stat
+    artifact_defaults:
+      artifact_type: filesystem_action
+      artifact_domain: filesystem_action
+      domain_tag: filesystem_action
+
+  fs.move:
+    description: Перемещает файл или папку внутри разрешённых областей.
+    input_schema:
+      source_path: string
+      target_path: string
+      overwrite: boolean
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: user_approved_paths
+    dry_run_preview: true
+    is_idempotent: false
+    rollback_strategy: move_back_to_source
+    verification_policy: fs_move_source_missing_target_present_hash_match
+    artifact_defaults:
+      artifact_type: filesystem_action
+      artifact_domain: filesystem_action
+      domain_tag: filesystem_action
+
+  fs.delete:
+    description: Удаляет файл или папку после двойного подтверждения.
+    input_schema:
+      path: string
+      recursive: boolean
+    side_effect_level: destructive
+    requires_hitl: true
+    confirmation_required: double
+    sandbox_scope: user_approved_paths
+    dry_run_preview: true
+    is_idempotent: false
+    rollback_strategy: restore_from_snapshot_or_quarantine
+    verification_policy: fs_delete_target_absent_snapshot_present
+    artifact_defaults:
+      artifact_type: filesystem_action
+      artifact_domain: filesystem_action
+      domain_tag: filesystem_action
+
+  fs.export:
+    description: Р­РєСЃРїРѕСЂС‚РёСЂСѓРµС‚ С„Р°Р№Р» РёР»Рё РїР°РїРєСѓ РёР· sandbox РІ СЂР°Р·СЂРµС€С‘РЅРЅС‹Р№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїСѓС‚СЊ.
+    input_schema:
+      source_path: string
+      destination_path: string
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: user_approved_paths
+    dry_run_preview: true
+    is_idempotent: false
+    rollback_strategy: delete_exported_copy
+    verification_policy: fs_export_target_present
+    artifact_defaults:
+      artifact_type: filesystem_action
+      artifact_domain: filesystem_action
+      domain_tag: filesystem_action
+
+  package.install:
+    description: Устанавливает пакет через доверенный менеджер.
+    input_schema:
+      manager: string
+      package_name: string
+      version: string
+      source: string
+    supported_managers:
+      - pip
+      - npm
+      - brew
+      - winget
+      - apt
+    allowed_sources:
+      - official
+      - verified
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: environment_scoped
+    dry_run_preview: true
+    is_idempotent: true
+    rollback_strategy: uninstall_installed_package
+    verification_policy: package_present_in_manager_listing
+    artifact_defaults:
+      artifact_type: package_action
+      artifact_domain: system_change
+      domain_tag: package_action
+
+  package.update:
+    description: Обновляет пакет через доверенный менеджер.
+    input_schema:
+      manager: string
+      package_name: string
+      target_version: string
+    supported_managers:
+      - pip
+      - npm
+      - brew
+      - winget
+      - apt
+    allowed_sources:
+      - official
+      - verified
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: environment_scoped
+    dry_run_preview: true
+    is_idempotent: false
+    rollback_strategy: reinstall_previous_version
+    verification_policy: package_version_matches_target
+    artifact_defaults:
+      artifact_type: package_action
+      artifact_domain: system_change
+      domain_tag: package_action
+
+  web.search:
+    description: Выполняет безопасный веб-поиск без изменений в системе.
+    input_schema:
+      query: string
+      max_results: integer
+      domains: array
+    side_effect_level: read_only
+    requires_hitl: false
+    sandbox_scope: none
+    dry_run_preview: false
+    is_idempotent: true
+    rollback_strategy: no_op
+    verification_policy: search_results_non_empty_or_explicit_empty
+    artifact_defaults:
+      artifact_type: research
+      artifact_domain: research
+      domain_tag: research
+
+  web.download:
+    description: Загружает файл во временную quarantine-область.
+    input_schema:
+      url: string
+      target_filename: string
+      expected_hash: string
+    allowed_extensions:
+      - .pdf
+      - .docx
+      - .xlsx
+      - .zip
+      - .txt
+      - .csv
+    max_file_size_mb: 100
+    side_effect_level: external_write
+    requires_hitl: true
+    sandbox_scope: quarantine_only
+    dry_run_preview: true
+    is_idempotent: false
+    rollback_strategy: delete_quarantined_file
+    verification_policy: download_size_extension_hash_and_scan
+    artifact_defaults:
+      artifact_type: research
+      artifact_domain: research
+      domain_tag: research
+
+  app.launch:
+    description: Запускает разрешённое приложение и проверяет его состояние.
+    input_schema:
+      app_name: string
+      arguments: array
+    allowed_apps:
+      - browser
+      - calendar
+      - mail
+      - terminal
+      - text_editor
+    side_effect_level: read_only
+    requires_hitl: false
+    sandbox_scope: app_whitelist
+    dry_run_preview: false
+    is_idempotent: true
+    rollback_strategy: close_launched_app_if_requested
+    verification_policy: process_or_window_present
+    artifact_defaults:
+      artifact_type: app_action
+      artifact_domain: application_automation
+      domain_tag: app_action
