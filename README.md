@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # agentgraph
 
 Declarative multi-agent DSL and desktop workflow layer built on top of
@@ -90,3 +91,6 @@ such as `research.search` and `validator.logic`.
 This directory is ready to be used as the root of a standalone repository.
 Before pushing, initialize git here and set the final repository URL in
 `pyproject.toml` if you want package metadata to point to GitHub.
+=======
+# AgentGraph
+>>>>>>> 23a7d8a692ac06daa8a16662cc6802c26afde971
